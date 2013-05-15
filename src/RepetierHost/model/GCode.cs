@@ -66,10 +66,12 @@ namespace RepetierHost.model
         private ushort fields = 128;
         private ushort fields2 = 0;
         int n;
+        public bool laserOn = false;
         public bool comment = false;
         private ushort g = 0, m = 0;
         private byte t = 0;
-        private float x, y, z, e, f,ii,j,r;
+        private float x, y, z, e, f, ii, j, r;
+        private float zl, zr;
         private int s;
         private int p;
         private String text = null;
@@ -93,6 +95,8 @@ namespace RepetierHost.model
             get { return text; }
             set { text = value; if (text.Length > 16) ActivateV2OrForceAscii(); fields |= 32768; }
         }
+
+
         public bool hasN { get { return (fields & 1) != 0; } }
         public int N
         {
@@ -175,8 +179,14 @@ namespace RepetierHost.model
         public bool hasR { get { return (fields2 & 4) != 0; } }
         public float R
         {
-            get { return r; }
-            set { r = value; fields2 |= 4; ActivateV2OrForceAscii(); }
+            get { return zr; }
+            set { zr = value; fields2 |= 4;}
+        }
+        public bool hasL { get { return (fields2 & 4) != 0; } }
+        public float L
+        {
+            get { return zl; }
+            set { zl = value; fields2 |= 8; }
         }
         public bool isV2 { get { return (fields & 4096) != 0; } }
         /// <summary>
@@ -422,6 +432,9 @@ namespace RepetierHost.model
                     break;
                 case 'R':
                     R = (float)d;
+                    break;
+                case 'L':
+                    L = (float)d;
                     break;
                 default:
                     forceAscii = true;

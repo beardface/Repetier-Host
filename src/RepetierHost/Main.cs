@@ -237,6 +237,9 @@ namespace RepetierHost
             tabModel.Controls.Add(stlComposer1);
             printPanel = new PrintPanel();
             printPanel.Dock = DockStyle.Fill;
+#if OPENSL
+            printPanel.hideExtruderTemp();
+#endif
             tabPrint.Controls.Add(printPanel);
             printerSettings.formToCon();
             logView = new LogView();

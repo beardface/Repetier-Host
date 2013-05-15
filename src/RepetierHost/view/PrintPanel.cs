@@ -35,7 +35,7 @@ namespace RepetierHost.view
         LinkedList<string> commands = new LinkedList<string>();
         int commandPos = 0;
         bool createCommands = true;
-        float lastx = -1000, lasty = -1000, lastz = -1000;
+        float lastx = -1000, lasty = -1000, lastzl = -1000, lastzr = -1000;
         private PrinterStatus status = PrinterStatus.disconnected;
         private long statusSet=0;
         public PrintPanel()
@@ -45,16 +45,13 @@ namespace RepetierHost.view
             ann = con.analyzer;
             con.eventConnectionChange += ConnectionChanged;
             ann.fanVoltage = trackFanVoltage.Value;
-            con.eventTempChange += tempUpdate;
           //  ann.eventPosChanged += coordUpdate;
             ann.eventChange += analyzerChange;
             UpdateConStatus(false);
-            textExtrudeSpeed.Text = RegMemory.GetString("panelExtrudeSpeed", textExtrudeSpeed.Text);
-            textExtrudeAmount.Text = RegMemory.GetString("panelExtrudeAmount", textExtrudeAmount.Text);
-            textRetractAmount.Text = RegMemory.GetString("panelRetractAmount", textRetractAmount.Text);
 
             float volt = 100f * trackFanVoltage.Value / 255;
-            labelVoltage.Text = Trans.T1("L_OUTPUT_PERCENT",volt.ToString("0.0")); //"Output " + volt.ToString("0.0") + "%";
+            labelVoltage.Text = Trans.T1("L_OUTPUT_PERCENT", volt.ToString("0.0")); //"Output " + volt.ToString("0.0") + "%";
+            labelLaserVoltage.Text = Trans.T1("L_OUTPUT_PERCENT", volt.ToString("0.0")); //"Output " + volt.ToString("0.0") + "%";
             arrowButtonXMinus.PossibleValues = Custom.GetString("xyMoveDistances", arrowButtonXMinus.PossibleValues);
             arrowButtonXPlus.PossibleValues = Custom.GetString("xyMoveDistances", arrowButtonXPlus.PossibleValues);
             arrowButtonYMinus.PossibleValues = Custom.GetString("xyMoveDistances", arrowButtonYMinus.PossibleValues);
@@ -62,7 +59,7 @@ namespace RepetierHost.view
             if (Custom.GetBool("noPowerControlButton", false))
                 switchPower.Visible = false;
             timer.Start();
-            comboExtruder.SelectedIndex = 0;
+
             if (Main.main != null)
             {
                 translate();
@@ -79,57 +76,32 @@ namespace RepetierHost.view
             float volt = 100f * trackFanVoltage.Value / 255;
             labelVoltage.Text = Trans.T1("L_OUTPUT_PERCENT", volt.ToString("0.0")); //"Output " + volt.ToString("0.0") + "%";
             switchPower.TextOff = switchPower.TextOn = Trans.T("B_POWER");
-            switchExtruderHeatOn.TextOff = switchExtruderHeatOn.TextOn = Trans.T("B_HEAT_EXTRUDER");
-            switchBedHeat.TextOff = switchBedHeat.TextOn = Trans.T("B_HEAT_PRINTBED");
             switchFanOn.TextOff = switchFanOn.TextOn = Trans.T("B_FAN");
+            switchLaserOn.TextOff = switchFanOn.TextOn = Trans.T("B_LASER");
             groupBox_Fan.Text = Trans.T("L_FAN");
+            groupBox_Fan.Text = Trans.T("L_LASER");
             switchErrors.TextOff = switchErrors.TextOn = Trans.T("B_DEBUG_ERRORS");
             switchEcho.TextOff = switchEcho.TextOn = Trans.T("B_DEBUG_ECHO");
             switchDryRun.TextOff = switchDryRun.TextOn = Trans.T("B_DRY_RUN");
             switchInfo.TextOff = switchInfo.TextOn = Trans.T("B_DEBUG_INFO");
-            groupExtruder.Text = Trans.T("L_EXTRUDER");
-            groupPrintbed.Text = Trans.T("L_PRINTBED");
             groupSpeedMultiply.Text = Trans.T("L_SPEED_MULTIPLY");
-            labelExtrude.Text = Trans.T("L_EXTRUDE_MM");
-            labelExtruderSpeed.Text = Trans.T("L_EXTRUDER_SPEED_MM_MIN");
-            labelRetract.Text = Trans.T("L_RETRACT_MM");
             //labelTemp.Text = labelTemp2.Text = Trans.T("L_TEMP");
             labelFeedrate.Text = Trans.T("L_FEEDRATE:");
             labelFlowrate.Text = Trans.T("L_FLOWRATE:");
             groupDebugOptions.Text = Trans.T("L_DEBUG_OPTIONS");
             Status = status;
-            refillExtruder();
-        }
-        public void refillExtruder()
-        {
-            int se = comboExtruder.SelectedIndex;
-            createCommands = false;
-            comboExtruder.Items.Clear();
-            for (int i = 1; i <= con.numExtruder; i++)
-            {
-                comboExtruder.Items.Add(Trans.T1("L_EXTRUDER_X",i.ToString()));
-            }
-            if(se<comboExtruder.Items.Count)
-                comboExtruder.SelectedIndex = se;
-            createCommands = true;
         }
         public void updateStatus()
         {
             TimeSpan t = (DateTime.UtcNow - new DateTime(1970, 1, 1));
             long timestamp = (long)t.TotalSeconds;
             long diff = timestamp - statusSet;
-            float etemp = ann.getTemperature(ann.activeExtruderId);
+            
             if (Main.conn.connected == false)
             {
                 if (status != PrinterStatus.disconnected)
                     Status = PrinterStatus.disconnected;
             }
-            else if (etemp > 15 && etemp - con.getTemperature(-1) > 5)
-                Status = PrinterStatus.heatingExtruder;
-            else if (ann.bedTemp > 15 && ann.bedTemp - con.bedTemp > 5 && con.bedTemp > 15) // only if has bed
-                Status = PrinterStatus.heatingBed;
-            else if (status == PrinterStatus.heatingBed || status == PrinterStatus.heatingExtruder)
-                Status = PrinterStatus.idle;
             else if (Main.conn.paused && status != PrinterStatus.jobPaused)
                 Status = PrinterStatus.jobPaused;
             else if (status == PrinterStatus.jobPaused && !Main.conn.paused)
@@ -197,60 +169,21 @@ namespace RepetierHost.view
         public void ConnectionChanged(string msg) {
             UpdateConStatus(Main.conn.serial != null || Main.conn.isVirtualActive);
         }
-        private void tempUpdate(float extruder, float printbed)
-        {
-            labelExtruderTemp.Text = extruder.ToString("0.00") + "°C /";
-            labelPrintbedTemp.Text = printbed.ToString("0.00") + "°C /";
-            string tr = "";
-            if (con.extruderTemp.Count == 1)
-            {
-                tr += Trans.T("L_EXTRUDER:")+" " + con.getTemperature(-1).ToString("0.00");
-                if (switchExtruderHeatOn.On) tr += "/" + ann.getTemperature(-1).ToString() + "°C";
-                else tr += "°C/" + Trans.T("L_OFF");
-                tr += " ";
-            }
-            else
-            {
-                foreach (int extr in con.extruderTemp.Keys)
-                {
-                    tr += Trans.T1("L_EXTRUDER_X",(extr+1).ToString()) + ": " + con.getTemperature(extr).ToString("0.00");
-                    if (ann.getTemperature(extr)>=20) tr += "/" + ann.getTemperature(extr).ToString() + "°C";
-                    else tr += "°C/" + Trans.T("L_OFF");
-                    tr += " ";
-                }
-            }
-            if (con.bedTemp > 0)
-            {
-                tr += Trans.T("L_BED:")+" " + con.bedTemp.ToString("0.00");
-                if (ann.bedTemp > 0) tr += "/" + ann.bedTemp.ToString() + "°C ";
-                else tr += "°C/"+Trans.T("L_OFF");
-            }
-            Main.main.toolTempReading.Text = tr;
-        }
+       
         public void analyzerChange() {
             createCommands = false;
-            if (ann.getTemperature(-1) > 0)
-                numericUpDownExtruder.Value = (int)ann.getTemperature(-1);
-            //    textExtruderSetTemp.Text = ann.extruderTemp.ToString();
-            if (ann.bedTemp > 0)
-                numericPrintBed.Value = (int)ann.bedTemp;
-            //    textPrintbedTemp.Text = ann.bedTemp.ToString();
-            switchExtruderHeatOn.On = ann.getTemperature(-1) > 0;
             switchFanOn.On = ann.fanOn;
+            switchLaserOn.On = ann.laserOn;
             trackFanVoltage.Value = ann.fanVoltage;
-            switchBedHeat.On = ann.bedTemp > 0;
+            trackLaserVoltage.Value = ann.laserVoltage;
             switchPower.On = ann.powerOn;
             sliderSpeed.Value = con.speedMultiply;
             numericUpDownSpeed.Value = con.speedMultiply;
             sliderFlowrate.Value = con.flowMultiply;
             numericUpDownFlow.Value = con.flowMultiply;
-            //labelSpeed.Text = sliderSpeed.Value.ToString() + "%";
-            tempUpdate(con.getTemperature(-1), con.bedTemp);
-            if(ann.activeExtruderId>=0 && ann.activeExtruderId<comboExtruder.Items.Count)
-                comboExtruder.SelectedIndex = ann.activeExtruderId;
             createCommands = true;
         }
-        private void coordUpdate(GCode code,float x,float y,float z) {
+        private void coordUpdate(GCode code,float x,float y,float zl,float zr) {
             if (x != -lastx || x==0)
             {
                 labelX.Text = "X=" + x.ToString("0.00");
@@ -269,14 +202,23 @@ namespace RepetierHost.view
                     labelY.ForeColor = Color.Red;
                 lasty = y;
             }
-            if (z != lastz || z==0)
+            if (zl != lastzl || zl==0)
             {
-                labelZ.Text = "Z=" + z.ToString("0.00");
+                labelZL.Text = "ZL=" + zl.ToString("0.00");
                 if (ann.hasZHome)
-                    labelZ.ForeColor = SystemColors.ControlText;
+                    labelZL.ForeColor = SystemColors.ControlText;
                 else
-                    labelZ.ForeColor = Color.Red;
-                lastz = z;
+                    labelZL.ForeColor = Color.Red;
+                lastzl = zl;
+            }
+            if (zr != lastzr || zr == 0)
+            {
+                labelZR.Text = "ZR=" + zr.ToString("0.00");
+                if (ann.hasZHome)
+                    labelZR.ForeColor = SystemColors.ControlText;
+                else
+                    labelZR.ForeColor = Color.Red;
+                lastzr = zr;
             }
         }
         public void UpdateConStatus(bool c)
@@ -286,13 +228,10 @@ namespace RepetierHost.view
             Main.main.menuSDCardManager.Enabled = c;
            // switchConnect.On = c;
             textGCode.Enabled = c;
-            switchBedHeat.Enabled = c;
             switchFanOn.Enabled = c;
-            switchExtruderHeatOn.Enabled = c;
             trackFanVoltage.Enabled = c;
-            numericUpDownExtruder.Enabled = c;
-            buttonExtrude.Enabled = c;
-            numericPrintBed.Enabled = c;
+            switchLaserOn.Enabled = c;
+            trackLaserVoltage.Enabled = c;
             buttonSend.Enabled = c;
             buttonHomeAll.Enabled = c;
             buttonHomeX.Enabled = c;
@@ -300,10 +239,6 @@ namespace RepetierHost.view
             buttonHomeZ.Enabled = c;
             buttonStopMotor.Enabled = c;
             switchPower.Enabled = c;
-            textRetractAmount.Enabled = c;
-            textExtrudeSpeed.Enabled = c;
-            textExtrudeAmount.Enabled = c;
-            buttonRetract.Enabled = c;
             switchEcho.Enabled = c;
             switchInfo.Enabled = c;
             switchDryRun.Enabled = c;
@@ -315,8 +250,12 @@ namespace RepetierHost.view
             arrowButtonXPlus.Enabled = c;
             arrowButtonYMinus.Enabled = c;
             arrowButtonYPlus.Enabled = c;
+            arrowButtonZLMinus.Enabled = c;
+            arrowButtonZLPlus.Enabled = c;
             arrowButtonZMinus.Enabled = c;
             arrowButtonZPlus.Enabled = c;
+            arrowButtonZRPlus.Enabled = c;
+            arrowButtonZRMinus.Enabled = c;
             sliderSpeed.Enabled = c && (con.isMarlin || con.isRepetier);
             sliderFlowrate.Enabled = c && (con.isMarlin || con.isRepetier);
             numericUpDownSpeed.Enabled = c && (con.isMarlin || con.isRepetier);
@@ -379,10 +318,14 @@ namespace RepetierHost.view
             bool wasrel = con.analyzer.relative;
             //if(!wasrel) 
                 con.injectManualCommand("G91");
-            if(axis.Equals("Z"))
-                con.injectManualCommand("G1 " + axis + amount.ToString(GCode.format) + " F" + con.maxZFeedRate.ToString(GCode.format));
-            else
-                con.injectManualCommand("G1 " + axis + amount.ToString(GCode.format) + " F" + con.travelFeedRate.ToString(GCode.format));
+                if (axis.Equals("Z"))
+                    con.injectManualCommand("G1 " + axis + amount.ToString(GCode.format) + " F" + con.maxZFeedRate.ToString(GCode.format));
+                else if (axis.Equals("L"))
+                    con.injectManualCommand("G0 L" + amount.ToString(GCode.format) + " F" + con.maxZFeedRate.ToString(GCode.format));
+                else if (axis.Equals("R"))
+                    con.injectManualCommand("G0 R" + amount.ToString(GCode.format) + " F" + con.maxZFeedRate.ToString(GCode.format));
+                else
+                    con.injectManualCommand("G1 " + axis + amount.ToString(GCode.format) + " F" + con.travelFeedRate.ToString(GCode.format));
             //if (!wasrel) 
                 con.injectManualCommand("G90");
             con.ReturnInjectLock();
@@ -525,6 +468,23 @@ namespace RepetierHost.view
             con.ReturnInjectLock();
         }
 
+        private void switchLaserOn_Change(SwitchButton b)
+        {
+            if (Main.conn.connected == false) return;
+            if (!createCommands) return;
+            con.GetInjectLock();
+            if (switchLaserOn.On)
+            {
+                //if(ann.fanVoltage!=trackFanVoltage.Value)
+                con.injectManualCommand("M600 S" + trackFanVoltage.Value);
+            }
+            else
+            {
+                con.injectManualCommand("M601");
+            }
+            con.ReturnInjectLock();
+        }
+
         private void trackFanVoltage_ValueChanged(object sender, EventArgs e)
         {
             float volt = 100f*trackFanVoltage.Value/255;
@@ -535,50 +495,14 @@ namespace RepetierHost.view
                 switchFanOn_Change(null);
         }
 
-        private void buttonExtrude_Click(object sender, EventArgs e)
+        private void trackLaserVoltage_ValueChanged(object sender, EventArgs e)
         {
-            con.GetInjectLock();
-            bool wasrel = con.analyzer.relative;
-            if (!wasrel) con.injectManualCommand("G91");
-            con.injectManualCommand("G1 E" + textExtrudeAmount.Text.Trim() + " F"+textExtrudeSpeed.Text.Trim());
-            if (!wasrel) con.injectManualCommand("G90");
-            con.ReturnInjectLock();
-        }
-
-        private void switchExtruderHeatOn_Change(SwitchButton b)
-        {
-            if (Main.conn.connected == false) return;
+            float volt = 100f * trackLaserVoltage.Value / 255;
+            labelLaserVoltage.Text = Trans.T1("L_OUTPUT_PERCENT", volt.ToString("0.0"));
             if (!createCommands) return;
-            //int temp = 0;
-            //int.TryParse(textExtruderSetTemp.Text,out temp);
-            con.GetInjectLock();
-            if (switchExtruderHeatOn.On)
-            {
-                con.injectManualCommand("M104 S" + numericUpDownExtruder.Value);
-            }
-            else
-            {
-                con.injectManualCommand("M104 S0");
-            }
-            con.ReturnInjectLock();
-        }
 
-        private void switchBedHeat_Change(SwitchButton b)
-        {
-            if (Main.conn.connected == false) return;
-            if (!createCommands) return;
-            //int temp = 0;
-            //int.TryParse(textPrintbedTemp.Text, out temp);
-            con.GetInjectLock();
-            if (switchBedHeat.On)
-            {
-                con.injectManualCommand("M140 S" + numericPrintBed.Value);
-            }
-            else
-            {
-                con.injectManualCommand("M140 S0");
-            }
-            con.ReturnInjectLock();
+            if (switchLaserOn.On)
+                switchLaserOn_Change(null);
         }
 
         private void switchEcho_Change(SwitchButton b)
@@ -718,34 +642,10 @@ namespace RepetierHost.view
 
         private void timer_Tick(object sender, EventArgs e)
         {
-            coordUpdate(null, ann.x, ann.y, ann.z);
+            coordUpdate(null, ann.x, ann.y, ann.zl, ann.zr);
             updateStatus();
         }
 
-        private void buttonRetract_Click(object sender, EventArgs e)
-        {
-            con.GetInjectLock();
-            bool wasrel = con.analyzer.relative;
-            if (!wasrel) con.injectManualCommand("G91");
-            con.injectManualCommand("G1 E-" + textRetractAmount.Text.Trim() + " F" + textExtrudeSpeed.Text.Trim());
-            if (!wasrel) con.injectManualCommand("G90");
-            con.ReturnInjectLock();
-        }
-
-        private void textExtrudeSpeed_TextChanged(object sender, EventArgs e)
-        {
-            RegMemory.SetString("panelExtrudeSpeed", textExtrudeSpeed.Text);
-        }
-
-        private void textExtrudeAmount_TextChanged(object sender, EventArgs e)
-        {
-            RegMemory.SetString("panelExtrudeAmount", textExtrudeAmount.Text);
-        }
-
-        private void textRetractAmount_TextChanged(object sender, EventArgs e)
-        {
-            RegMemory.SetString("panelRetractAmount", textRetractAmount.Text);
-        }
 
         private void sliderSpeed_ValueChanged(object sender, EventArgs e)
         {
@@ -775,29 +675,6 @@ namespace RepetierHost.view
             }
         }
 
-        private void numericUpDownExtruder_ValueChanged(object sender, EventArgs e)
-        {
-            if (!createCommands) return;
-            if (switchExtruderHeatOn.On)
-            {
-                con.GetInjectLock();
-                con.injectManualCommand("M104 S" + numericUpDownExtruder.Value.ToString("0"));
-                con.ReturnInjectLock();
-            }
-        }
-
-        private void numericPrintBed_ValueChanged(object sender, EventArgs e)
-        {
-            if (!createCommands) return;
-            if (switchBedHeat.On)
-            {
-                con.GetInjectLock();
-                con.injectManualCommand("M140 S" + numericPrintBed.Value.ToString("0"));
-                con.ReturnInjectLock();
-            }
-
-        }
-
         private void XY_arrowValueChanged(ArrowButton sender, string value)
         {
             if (value.Length == 0)
@@ -805,12 +682,21 @@ namespace RepetierHost.view
             else
                 labelMoveDist.Text = value + " mm";
         }
-        private void Z_arrowValueChanged(ArrowButton sender, string value)
+
+        private void ZL_arrowValueChanged(ArrowButton sender, string value)
         {
             if (value.Length == 0)
-                labelZDiff.Text = "";
+                labelZLDiff.Text = "";
             else
-                labelZDiff.Text = value + " mm";
+                labelZLDiff.Text = value + " mm";
+        }
+
+        private void ZR_arrowValueChanged(ArrowButton sender, string value)
+        {
+            if (value.Length == 0)
+                labelZLDiff.Text = "";
+            else
+                labelZLDiff.Text = value + " mm";
         }
 
         private void arrowButtonXPlus_Click(object sender, EventArgs e)
@@ -842,19 +728,35 @@ namespace RepetierHost.view
             moveHead("Y", d);
         }
 
-        private void arrowButtonZPlus_Click(object sender, EventArgs e)
+        private void arrowButtonZLPlus_Click(object sender, EventArgs e)
         {
             float d = ((ArrowButton)sender).CurrentValueF;
-            if (ann.hasZHome && d + ann.z > Main.printerSettings.PrintAreaHeight) d = Main.printerSettings.PrintAreaHeight - ann.z;
-            moveHead("Z", d);
+            if (ann.hasZHome && d + ann.zl > Main.printerSettings.PrintAreaHeight) d = Main.printerSettings.PrintAreaHeight - ann.zl;
+            moveHead("L", d);
 
         }
 
-        private void arrowButtonZMinus_Click(object sender, EventArgs e)
+        private void arrowButtonZRPlus_Click(object sender, EventArgs e)
+        {
+            float d = ((ArrowButton)sender).CurrentValueF;
+            if (ann.hasZHome && d + ann.zr > Main.printerSettings.PrintAreaHeight) d = Main.printerSettings.PrintAreaHeight - ann.zr;
+            moveHead("R", d);
+
+        }
+
+        private void arrowButtonZLMinus_Click(object sender, EventArgs e)
         {
             float d = -((ArrowButton)sender).CurrentValueF;
-            if (FormPrinterSettings.ps.printerType != 3 && (ann.hasZHome && d + ann.z < 0)) d = -ann.z;
-            moveHead("Z", d);
+            if (FormPrinterSettings.ps.printerType != 3 && (ann.hasZHome && d + ann.zl < 0)) d = -ann.zl;
+            moveHead("L", d);
+
+        }
+
+        private void arrowButtonZRMinus_Click(object sender, EventArgs e)
+        {
+            float d = -((ArrowButton)sender).CurrentValueF;
+            if (FormPrinterSettings.ps.printerType != 3 && (ann.hasZHome && d + ann.zr < 0)) d = -ann.zr;
+            moveHead("R", d);
 
         }
 
@@ -887,10 +789,27 @@ namespace RepetierHost.view
 
         }
 
-        private void comboExtruder_SelectedIndexChanged(object sender, EventArgs e)
+        private void PrintPanel_Load(object sender, EventArgs e)
         {
-            if (!createCommands) return;
-            con.injectManualCommand("T" + comboExtruder.SelectedIndex);
+
+        }
+
+        private void arrowButtonZPlus_Click(object sender, EventArgs e)
+        {
+            float d = ((ArrowButton)sender).CurrentValueF;
+            if (ann.hasZHome && d + ann.zr > Main.printerSettings.PrintAreaHeight) d = Main.printerSettings.PrintAreaHeight - ann.zr;
+            if (ann.hasZHome && d + ann.zl > Main.printerSettings.PrintAreaHeight) d = Main.printerSettings.PrintAreaHeight - ann.zl;
+
+            moveHead("Z", d);
+        }
+
+        private void arrowButtonZMinus_Click(object sender, EventArgs e)
+        {
+            float d = -((ArrowButton)sender).CurrentValueF;
+            if (FormPrinterSettings.ps.printerType != 3 && (ann.hasZHome && d + ann.zr < 0)) d = -ann.zr;
+            if (FormPrinterSettings.ps.printerType != 3 && (ann.hasZHome && d + ann.zl < 0)) d = -ann.zl;
+            moveHead("Z", d);
+
         }
 
      }

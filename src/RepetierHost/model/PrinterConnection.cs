@@ -758,8 +758,12 @@ namespace RepetierHost.model
                 GetInjectLock();
                 injectManualCommand("N0 M110"); // Make sure we tal about the same linenumbers
                 injectManualCommand("M115"); // Check firmware
+
+#if !OPENSL
                 injectManualCommand("T" + Main.main.printPanel.comboExtruder.SelectedIndex);
                 injectManualCommand("M105"); // Read temperature
+#endif
+
                 ReturnInjectLock();
                 if (eventConnectionChange != null)
                     eventConnectionChange(Trans.T("L_CONNECTED"));
@@ -1138,7 +1142,8 @@ namespace RepetierHost.model
             {
                 level = 3;
                 float.TryParse(h, NumberStyles.Float, GCode.format, out z);
-                analyzer.z = z;
+                analyzer.zl = z;
+                analyzer.zr = z;
                 analyzer.hasZHome = true;
             }
             h = extract(res, "E:");
@@ -1393,9 +1398,9 @@ namespace RepetierHost.model
             string zextra = "";
             GetInjectLock();
             injectManualCommand("G1 X" + dx.ToString(GCode.format) + " Y" + dy.ToString(GCode.format) + " F" + travelFeedRate.ToString(GCode.format));
-            if (analyzer.hasZHome && analyzer.z + analyzer.zOffset < disposeZ && disposeZ > 0 && disposeZ <= Main.printerSettings.PrintAreaHeight)
+            if (analyzer.hasZHome && analyzer.zl + analyzer.zOffset < disposeZ && disposeZ > 0 && disposeZ <= Main.printerSettings.PrintAreaHeight)
             {
-                float dz = disposeZ - analyzer.zOffset - (analyzer.relative ? analyzer.z : 0);
+                float dz = disposeZ - analyzer.zOffset - (analyzer.relative ? analyzer.zl : 0);
                 zextra = "G1 Z" + dz.ToString(GCode.format) + " F" + maxZFeedRate.ToString(GCode.format);
                 injectManualCommand(zextra);
             }

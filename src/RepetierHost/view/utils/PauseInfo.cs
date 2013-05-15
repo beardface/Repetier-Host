@@ -25,7 +25,7 @@ namespace RepetierHost.view.utils
             GCodeAnalyzer a = Main.conn.analyzer;
             x = a.x-a.xOffset;
             y = a.y-a.yOffset;
-            z = a.z-a.zOffset;
+            z = a.zl-a.zOffset;
             e = a.activeExtruder.e - a.activeExtruder.eOffset;
             f = a.f;
             relative = a.relative;

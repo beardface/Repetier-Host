@@ -730,7 +730,10 @@ namespace RepetierHost.model
             float locDist = (float)Math.Sqrt((x - lastx) * (x - lastx) + (y - lasty) * (y - lasty) + (z - lastz) * (z - lastz));
             bool isLastPos = locDist < 0.00001;
             if (!act.hasG || (act.G > 3 && act.G != 28)) return;
-            bool isTravel = (FormPrinterSettings.ps.printerType == 3 ? Math.Max(z, lastz) - ana.zOffset >= FormPrinterSettings.ps.cncZTop : !ana.eChanged);
+            bool isTravel = (FormPrinterSettings.ps.printerType == 3 ? Math.Max(z, lastz) - ana.zOffset >= FormPrinterSettings.ps.cncZTop : !ana.laserOn);
+
+            isTravel = isTravel || ana.laserOn;
+
             int segpos = ana.activeExtruderId;
             if (segpos < 0 || segpos >= MaxExtruder) segpos = 0;
             LinkedList<GCodePath> seg = segments[segpos];
@@ -798,7 +801,7 @@ namespace RepetierHost.model
             float locDist = (float)Math.Sqrt((x - lastx) * (x - lastx) + (y - lasty) * (y - lasty) + (z - lastz) * (z - lastz));
             bool isLastPos = locDist < 0.00001;
             int segpos = ana.activeExtruderId;
-            bool isTravel = (FormPrinterSettings.ps.printerType == 3 ? Math.Max(z,lastz) - ana.zOffset >= FormPrinterSettings.ps.cncZTop : !ana.eChanged);
+            bool isTravel = (FormPrinterSettings.ps.printerType == 3 ? Math.Max(z,lastz) - ana.zOffset >= FormPrinterSettings.ps.cncZTop : !ana.laserOn);
             if (segpos < 0 || segpos >= MaxExtruder) segpos = 0;
             LinkedList<GCodePath> seg = segments[segpos];
             if (isTravel)
@@ -825,7 +828,7 @@ namespace RepetierHost.model
             }
             
             //if (!act.hasG || (act.G > 1 && act.G != 28)) return;
-            if (lastLayer == minLayer - 1 && (laste < e || FormPrinterSettings.ps.printerType == 3))
+          /*  if (lastLayer == minLayer - 1 && (ana.laserOn || FormPrinterSettings.ps.printerType == 3))
             {
                 GCodePath p = new GCodePath();
                 p.Add(new Vector3(lastx, lasty, lastz), laste, totalDist, GCodePoint.toFileLine(fileid, actLine));
@@ -836,8 +839,8 @@ namespace RepetierHost.model
                 }
                 seg.AddLast(p);
             }
-
-            if (seg.Count == 0 || (laste >= ana.activeExtruder.e && FormPrinterSettings.ps.printerType != 3)) // start new segment
+            */
+            if (seg.Count == 0 || (ana.laserOn && FormPrinterSettings.ps.printerType != 3)) // start new segment
             {
                 if (!isLastPos) // no move, no action
                 {

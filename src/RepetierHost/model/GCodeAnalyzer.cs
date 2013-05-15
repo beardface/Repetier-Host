@@ -49,11 +49,13 @@ namespace RepetierHost.model
         public LinkedList<GCodeShort> unchangedLayer = new LinkedList<GCodeShort>();
         public bool uploading = false;
         public float bedTemp = 0;
-        public float x = 0, y = 0, z = 0, f = 1000;
+        public float x = 0, y = 0, zr = 0, zl = 0, f = 1000;
         public float lastX = 0, lastY = 0, lastZ = 0;
         public float xOffset = 0, yOffset = 0, zOffset = 0, lastZPrint = 0, layerZ = 0;
         public bool fanOn = false;
+        public bool laserOn = false;
         public int fanVoltage = 0;
+        public int laserVoltage = 0;
         public bool powerOn = true;
         public bool relative = false;
         public bool eRelative = false;
@@ -134,7 +136,7 @@ namespace RepetierHost.model
             layer = 0;
             lastlayer = 0;
             layerZ = 0;
-            x = y = z = lastZPrint = 0;
+            x = y = zr = lastZPrint = 0;
             xOffset = yOffset = zOffset = 0;
             lastX = 0; lastY = 0; lastZ = 0;
             hasXHome = hasYHome = hasZHome = false;
@@ -180,7 +182,7 @@ namespace RepetierHost.model
                     hasXHome = hasYHome = hasZHome = true;
                     x = Main.printerSettings.XHomePos;
                     y = Main.printerSettings.YHomePos;
-                    z = Main.printerSettings.ZHomePos;
+                    zr = Main.printerSettings.ZHomePos;
                     xOffset = yOffset = zOffset = 0;
                 }
                 return;
@@ -201,21 +203,13 @@ namespace RepetierHost.model
                         {
                             if (code.hasX) x += code.X;
                             if (code.hasY) y += code.Y;
-                            if (code.hasZ) z += code.Z;
-                            if (code.hasE)
+                            if (code.hasZ)
                             {
-                                if (eChanged = code.E != 0)
-                                {
-                                    if (code.E < 0) activeExtruder.retracted = true;
-                                    else if (activeExtruder.retracted)
-                                    {
-                                        activeExtruder.retracted = false;
-                                        activeExtruder.e = activeExtruder.emax;
-                                    }
-                                    else
-                                        activeExtruder.e += code.E;
-                                }
+                                zr += code.Z;
+                                zl += code.Z;
                             }
+                            if (code.hasR) zr += code.R;
+                            if (code.hasL) zl += code.L;
                         }
                         else
                         {
@@ -223,7 +217,16 @@ namespace RepetierHost.model
                             if (code.hasY) y = yOffset + code.Y;
                             if (code.hasZ)
                             {
-                                z = zOffset + code.Z;
+                                zr = zOffset + code.Z;
+                                zl = zl + code.Z;
+                            }
+                            if (code.hasR)
+                            {
+                                zr = zOffset + code.R;
+                            }
+                            if (code.hasL)
+                            {
+                                zl += code.L;
                             }
                             if (code.hasE)
                             {
@@ -260,17 +263,17 @@ namespace RepetierHost.model
                         }
                         if (x < Main.printerSettings.XMin) { x = Main.printerSettings.XMin; hasXHome = false; }
                         if (y < Main.printerSettings.YMin) { y = Main.printerSettings.YMin; hasYHome = false; }
-                        if (z < 0 && FormPrinterSettings.ps.printerType!=3) { z = 0; hasZHome = false; }
+                        if (zr < 0 && FormPrinterSettings.ps.printerType!=3) { zr = 0; hasZHome = false; }
                         if (x > Main.printerSettings.XMax) { hasXHome = false; }
                         if (y > Main.printerSettings.YMax) { hasYHome = false; }
-                        if (z > printerHeight) { hasZHome = false; }
+                        if (zr > printerHeight) { hasZHome = false; }
                         if (activeExtruder.e > activeExtruder.emax)
                         {
                             activeExtruder.emax = activeExtruder.e;
-                            if (z != lastZPrint)
+                            if (zr != lastZPrint)
                             {
                                 layer++;
-                                lastZPrint = z;
+                                lastZPrint = zr;
                                 if (!privateAnalyzer && Main.conn.job.hasData() && Main.conn.job.maxLayer >= 0)
                                 {
                                     //PrinterConnection.logInfo("Printing layer " + layer.ToString() + " of " + Main.conn.job.maxLayer.ToString());
@@ -280,22 +283,22 @@ namespace RepetierHost.model
                         }
                         if (eventPosChanged != null)
                             if (privateAnalyzer)
-                                eventPosChanged(code, x, y, z);
+                                eventPosChanged(code, x, y, zr);
                             else
-                                Main.main.Invoke(eventPosChanged, code, x, y, z);
+                                Main.main.Invoke(eventPosChanged, code, x, y, zr);
                         float dx = Math.Abs(x - lastX);
                         float dy = Math.Abs(y - lastY);
-                        float dz = Math.Abs(z - lastZ);
+                        float dz = Math.Abs(zr - lastZ);
                         float de = Math.Abs(activeExtruder.e - activeExtruder.lastE);
                         if (dx + dy + dz > 0.001)
                         {
                             printingTime += Math.Sqrt(dx * dx + dy * dy + dz * dz) * 60.0f / f;
                         }
                         else printingTime += de * 60.0f / f;
-                        if (z != lastZ) unchangedLayer.Clear();
+                        if (zr != lastZ) unchangedLayer.Clear();
                         lastX = x;
                         lastY = y;
-                        lastZ = z;
+                        lastZ = zr;
                         activeExtruder.lastE = activeExtruder.e;
                         break;
                     case 2:
@@ -316,7 +319,16 @@ namespace RepetierHost.model
                                 }
                                 if (code.hasZ)
                                 {
-                                    z += code.Z;
+                                    zr += code.Z;
+                                    zl += code.Z;
+                                }
+                                if (code.hasR)
+                                {
+                                    zr += code.R;
+                                }
+                                if (code.hasL)
+                                {
+                                    zr += code.L;
                                 }
                                 if (code.hasE)
                                 {
@@ -345,42 +357,18 @@ namespace RepetierHost.model
                                 }
                                 if (code.hasZ)
                                 {
-                                    z = zOffset + code.Z;
-                                    //if (z < 0) { z = 0; hasZHome = NO; }
-                                    //if (z > printerHeight) { hasZHome = NO; }
+                                    zr = zOffset + code.Z;
+                                    zl = zl + code.Z;
                                 }
-                                if (code.hasE )
+                                if (code.hasR)
                                 {
-                                    if (eRelative)
-                                    {
-                                        if (eChanged = code.E != 0)
-                                        {
-                                            if (code.E < 0) activeExtruder.retracted = true;
-                                            else if (activeExtruder.retracted)
-                                            {
-                                                activeExtruder.retracted = false;
-                                                activeExtruder.e = activeExtruder.emax;
-                                            }
-                                            else
-                                                activeExtruder.e += code.E;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        if (eChanged = activeExtruder.e != (activeExtruder.eOffset + code.E))
-                                        {
-                                            activeExtruder.e = activeExtruder.eOffset + code.E;
-                                            if (activeExtruder.e < activeExtruder.lastE)
-                                                activeExtruder.retracted = true;
-                                            else if (activeExtruder.retracted)
-                                            {
-                                                activeExtruder.retracted = false;
-                                                activeExtruder.e = activeExtruder.emax;
-                                                activeExtruder.eOffset = activeExtruder.e - code.E;
-                                            }
-                                        }
-                                    }
+                                    zr = zOffset + code.R;
+                                }   
+                                if (code.hasL)
+                                {
+                                    zl = zl + code.L;
                                 }
+
                             }
 
                             float[] offset = new float[] { code.I, code.J};
@@ -390,105 +378,9 @@ namespace RepetierHost.model
                              }*/
                             float[] position = new float[] { lastX, lastY };
                             float[] target = new float[] { x, y };
-                            float r = code.R;
-                            if (r > 0)
-                            {
-                                /* 
-                                  We need to calculate the center of the circle that has the designated radius and passes
-                                  through both the current position and the target position. This method calculates the following
-                                  set of equations where [x,y] is the vector from current to target position, d == magnitude of 
-                                  that vector, h == hypotenuse of the triangle formed by the radius of the circle, the distance to
-                                  the center of the travel vector. A vector perpendicular to the travel vector [-y,x] is scaled to the 
-                                  length of h [-y/d*h, x/d*h] and added to the center of the travel vector [x/2,y/2] to form the new point 
-                                  [i,j] at [x/2-y/d*h, y/2+x/d*h] which will be the center of our arc.
-          
-                                  d^2 == x^2 + y^2
-                                  h^2 == r^2 - (d/2)^2
-                                  i == x/2 - y/d*h
-                                  j == y/2 + x/d*h
-          
-                                                                                       O <- [i,j]
-                                                                                    -  |
-                                                                          r      -     |
-                                                                              -        |
-                                                                           -           | h
-                                                                        -              |
-                                                          [0,0] ->  C -----------------+--------------- T  <- [x,y]
-                                                                    | <------ d/2 ---->|
-                    
-                                  C - Current position
-                                  T - Target position
-                                  O - center of circle that pass through both C and T
-                                  d - distance from C to T
-                                  r - designated radius
-                                  h - distance from center of CT to O
-          
-                                  Expanding the equations:
+                            
+                            float r = (float)Math.Sqrt(offset[0] * offset[0] + offset[1] * offset[1]); // Compute arc radius for mc_arc
 
-                                  d -> sqrt(x^2 + y^2)
-                                  h -> sqrt(4 * r^2 - x^2 - y^2)/2
-                                  i -> (x - (y * sqrt(4 * r^2 - x^2 - y^2)) / sqrt(x^2 + y^2)) / 2 
-                                  j -> (y + (x * sqrt(4 * r^2 - x^2 - y^2)) / sqrt(x^2 + y^2)) / 2
-         
-                                  Which can be written:
-          
-                                  i -> (x - (y * sqrt(4 * r^2 - x^2 - y^2))/sqrt(x^2 + y^2))/2
-                                  j -> (y + (x * sqrt(4 * r^2 - x^2 - y^2))/sqrt(x^2 + y^2))/2
-          
-                                  Which we for size and speed reasons optimize to:
-
-                                  h_x2_div_d = sqrt(4 * r^2 - x^2 - y^2)/sqrt(x^2 + y^2)
-                                  i = (x - (y * h_x2_div_d))/2
-                                  j = (y + (x * h_x2_div_d))/2
-          
-                                */
-                                //if(unit_inches) r*=25.4;
-                                // Calculate the change in position along each selected axis
-                                float cx = target[0] - position[0];
-                                float cy = target[1] - position[1];
-
-                                float h_x2_div_d = -(float)Math.Sqrt(4 * r * r - cx * cx - cy * cy) / (float)Math.Sqrt(cx * cx + cy * cy); // == -(h * 2 / d)
-                                // If r is smaller than d, the arc is now traversing the complex plane beyond the reach of any
-                                // real CNC, and thus - for practical reasons - we will terminate promptly:
-                                // if(isnan(h_x2_div_d)) { OUT_P_LN("error: Invalid arc"); break; }
-                                // Invert the sign of h_x2_div_d if the circle is counter clockwise (see sketch below)
-                                if (code.G == 3) { h_x2_div_d = -h_x2_div_d; }
-
-                                /* The counter clockwise circle lies to the left of the target direction. When offset is positive,
-                                   the left hand circle will be generated - when it is negative the right hand circle is generated.
-           
-           
-                                                                                 T  <-- Target position
-                                                         
-                                                                                 ^ 
-                                      Clockwise circles with this center         |          Clockwise circles with this center will have
-                                      will have > 180 deg of angular travel      |          < 180 deg of angular travel, which is a good thing!
-                                                                       \         |          /   
-                          center of arc when h_x2_div_d is positive ->  x <----- | -----> x <- center of arc when h_x2_div_d is negative
-                                                                                 |
-                                                                                 |
-                                                         
-                                                                                 C  <-- Current position                                 */
-
-
-                                // Negative R is g-code-alese for "I want a circle with more than 180 degrees of travel" (go figure!), 
-                                // even though it is advised against ever generating such circles in a single line of g-code. By 
-                                // inverting the sign of h_x2_div_d the center of the circles is placed on the opposite side of the line of
-                                // travel and thus we get the unadvisably long arcs as prescribed.
-                                if (r < 0)
-                                {
-                                    h_x2_div_d = -h_x2_div_d;
-                                    r = -r; // Finished with r. Set to positive for mc_arc
-                                }
-                                // Complete the operation by calculating the actual center of the arc
-                                offset[0] = 0.5f * (cx - (cy * h_x2_div_d));
-                                offset[1] = 0.5f * (cy + (cx * h_x2_div_d));
-
-                            }
-                            else
-                            { // Offset mode specific computations
-                                r = (float)Math.Sqrt(offset[0] * offset[0] + offset[1] * offset[1]); // Compute arc radius for mc_arc
-                            }
 
                             // Set clockwise/counter-clockwise sign for mc_arc computations
                             bool isclockwise = code.G == 2;
@@ -497,20 +389,20 @@ namespace RepetierHost.model
                             arc(position, target, offset, r, isclockwise,code);
                             lastX = x;
                             lastY = y;
-                            lastZ = z;
+                            lastZ = zr;
                             activeExtruder.lastE = activeExtruder.e;
                             if (x < Main.printerSettings.XMin) { x = Main.printerSettings.XMin; hasXHome = false; }
                             if (y < Main.printerSettings.YMin) { y = Main.printerSettings.YMin; hasYHome = false; }
-                            if (z < 0) { z = 0; hasZHome = false; }
+                            if (zr < 0) { zr = 0; hasZHome = false; }
                             if (x > Main.printerSettings.XMax) { hasXHome = false; }
                             if (y > Main.printerSettings.YMax) { hasYHome = false; }
-                            if (z > printerHeight) { hasZHome = false; }
+                            if (zr > printerHeight) { hasZHome = false; }
                             if (activeExtruder.e > activeExtruder.emax)
                             {
                                 activeExtruder.emax = activeExtruder.e;
-                                if (z > lastZPrint)
+                                if (zr > lastZPrint)
                                 {
-                                    lastZPrint = z;
+                                    lastZPrint = zr;
                                     layer++;
                                 }
                             }
@@ -523,13 +415,13 @@ namespace RepetierHost.model
                             bool homeAll = !(code.hasX || code.hasY || code.hasZ);
                             if (code.hasX || homeAll) { xOffset = 0; x = Main.printerSettings.XHomePos; hasXHome = true; }
                             if (code.hasY || homeAll) { yOffset = 0; y = Main.printerSettings.YHomePos; hasYHome = true; }
-                            if (code.hasZ || homeAll) { zOffset = 0; z = Main.printerSettings.ZHomePos; hasZHome = true; }
+                            if (code.hasZ || homeAll) { zOffset = 0; zr = Main.printerSettings.ZHomePos; hasZHome = true; }
                             if (code.hasE) { activeExtruder.eOffset = 0; activeExtruder.e = 0; activeExtruder.emax = 0; }
                             if (eventPosChanged != null)
                                 if (privateAnalyzer)
-                                    eventPosChanged(code, x, y, z);
+                                    eventPosChanged(code, x, y, zr);
                                 else
-                                    Main.main.Invoke(eventPosChanged, code, x, y, z);
+                                    Main.main.Invoke(eventPosChanged, code, x, y, zr);
                         }
                         break;
                     case 162:
@@ -537,12 +429,12 @@ namespace RepetierHost.model
                             bool homeAll = !(code.hasX || code.hasY || code.hasZ);
                             if (code.hasX || homeAll) { xOffset = 0; x = Main.printerSettings.XMax; hasXHome = true; }
                             if (code.hasY || homeAll) { yOffset = 0; y = Main.printerSettings.YMax; hasYHome = true; }
-                            if (code.hasZ || homeAll) { zOffset = 0; z = Main.printerSettings.PrintAreaHeight; hasZHome = true; }
+                            if (code.hasZ || homeAll) { zOffset = 0; zr = Main.printerSettings.PrintAreaHeight; hasZHome = true; }
                             if (eventPosChanged != null)
                                 if (privateAnalyzer)
-                                    eventPosChanged(code, x, y, z);
+                                    eventPosChanged(code, x, y, zr);
                                 else
-                                    Main.main.Invoke(eventPosChanged, code, x, y, z);
+                                    Main.main.Invoke(eventPosChanged, code, x, y, zr);
                         }
                         break;
                     case 90:
@@ -554,13 +446,15 @@ namespace RepetierHost.model
                     case 92:
                         if (code.hasX) { xOffset = x - code.X; x = xOffset; }
                         if (code.hasY) { yOffset = y - code.Y; y = yOffset; }
-                        if (code.hasZ) { zOffset = z - code.Z; z = zOffset; }
+                        if (code.hasZ) { zOffset = zr - code.Z; zr = zOffset; zl = zl - code.Z; }
+                        if (code.hasR) { zOffset = zr - code.R; zr = zOffset; }
+                        if (code.hasL) { zl = zl - code.L; }
                         if (code.hasE) { activeExtruder.eOffset = activeExtruder.e - code.E; activeExtruder.lastE = activeExtruder.e = activeExtruder.eOffset; }
                         if (eventPosChanged != null)
                             if (privateAnalyzer)
-                                eventPosChanged(code, x, y, z);
+                                eventPosChanged(code, x, y, zr);
                             else
-                                Main.main.Invoke(eventPosChanged, code, x, y, z);
+                                Main.main.Invoke(eventPosChanged, code, x, y, zr);
                         break;
                 }
             }
@@ -628,6 +522,14 @@ namespace RepetierHost.model
                         if (code.hasS)
                             speedMultiply = code.S;
                         break;
+                    case 600:
+                        laserOn = true;
+                        if (code.hasS) laserVoltage = code.S;
+                        fireChanged();
+                        break;
+                    case 601:
+                        laserOn = false;
+                        break;
                 }
             }
             else if (code.hasT)
@@ -637,6 +539,15 @@ namespace RepetierHost.model
                     extruder.Add(activeExtruderId, new ExtruderData(activeExtruderId));
                 activeExtruder = extruder[activeExtruderId];
                 fireChanged();
+            }
+
+            if (laserOn)
+            {
+                code.laserOn = true;
+            }
+            else
+            {
+                code.laserOn = false;
             }
         }
         private void arc(float[] position, float[] target, float[] offset, float radius, bool isclockwise,GCode code)
@@ -694,9 +605,9 @@ namespace RepetierHost.model
                 if (arc_target_e > activeExtruder.emax)
                 {
                     activeExtruder.emax = arc_target_e;
-                    if (z > lastZPrint)
+                    if (zr > lastZPrint)
                     {
-                        lastZPrint = z;
+                        lastZPrint = zr;
                         layer++;
                         if (code!=null)
                         {
@@ -711,19 +622,19 @@ namespace RepetierHost.model
                 if (code!=null)
                 {
                     if (privateAnalyzer)
-                        eventPosChanged(code, center_axis0 + r_axis0, center_axis1 + r_axis1, z);
+                        eventPosChanged(code, center_axis0 + r_axis0, center_axis1 + r_axis1, zr);
                     else
-                        Main.main.Invoke(eventPosChanged, code, center_axis0 + r_axis0, center_axis1 + r_axis1, z);
+                        Main.main.Invoke(eventPosChanged, code, center_axis0 + r_axis0, center_axis1 + r_axis1, zr);
                 } else
-                eventPosChangedFast(center_axis0 + r_axis0, center_axis1 + r_axis1, z, arc_target_e);
+                eventPosChangedFast(center_axis0 + r_axis0, center_axis1 + r_axis1, zr, arc_target_e);
             }
             // Ensure last segment arrives at target location.
             if (activeExtruder.e > activeExtruder.emax)
             {
                 activeExtruder.emax = activeExtruder.e;
-                if (z > lastZPrint)
+                if (zr > lastZPrint)
                 {
-                    lastZPrint = z;
+                    lastZPrint = zr;
                     layer++;
                     if (code!=null)
                     {
@@ -738,12 +649,12 @@ namespace RepetierHost.model
             if (code!=null)
             {
                 if (privateAnalyzer)
-                    eventPosChanged(code, x, y, z);
+                    eventPosChanged(code, x, y, zr);
                 else
-                    Main.main.Invoke(eventPosChanged, code, x, y, z);
+                    Main.main.Invoke(eventPosChanged, code, x, y, zr);
             }
             else
-                eventPosChangedFast(x, y, z, activeExtruder.e);
+                eventPosChangedFast(x, y, zr, activeExtruder.e);
 
         }
         public void analyzeShort(GCodeShort code)
@@ -771,7 +682,7 @@ namespace RepetierHost.model
                         }
                         if (code.hasZ)
                         {
-                            z += code.z;
+                            zr += code.z;
                             //if (z < 0) { z = 0; hasZHome = NO; }
                             //if (z > printerHeight) { hasZHome = NO; }
                         }
@@ -789,9 +700,9 @@ namespace RepetierHost.model
                                 if (activeExtruder.e > activeExtruder.emax)
                                 {
                                     activeExtruder.emax = activeExtruder.e;
-                                    if (z > lastZPrint)
+                                    if (zr > lastZPrint)
                                     {
-                                        lastZPrint = z;
+                                        lastZPrint = zr;
                                         layer++;
                                     }
                                 }
@@ -814,7 +725,7 @@ namespace RepetierHost.model
                         }
                         if (code.z != -99999)
                         {
-                            z = zOffset + code.z;
+                            zr = zOffset + code.z;
                             //if (z < 0) { z = 0; hasZHome = NO; }
                             //if (z > printerHeight) { hasZHome = NO; }
                         }
@@ -852,19 +763,19 @@ namespace RepetierHost.model
                             if (activeExtruder.e > activeExtruder.emax)
                             {
                                 activeExtruder.emax = activeExtruder.e;
-                                if (z != lastZPrint)
+                                if (zr != lastZPrint)
                                 {
-                                    lastZPrint = z;
+                                    lastZPrint = zr;
                                     layer++;
                                 }
                             }
                         }
                     }
                     if (eventPosChangedFast != null)
-                        eventPosChangedFast(x, y, z, activeExtruder.e);
+                        eventPosChangedFast(x, y, zr, activeExtruder.e);
                     float dx = Math.Abs(x - lastX);
                     float dy = Math.Abs(y - lastY);
-                    float dz = Math.Abs(z - lastZ);
+                    float dz = Math.Abs(zr - lastZ);
                     float de = Math.Abs(activeExtruder.e - activeExtruder.lastE);
                     if (dx + dy + dz > 0.001)
                     {
@@ -873,7 +784,7 @@ namespace RepetierHost.model
                     else printingTime += de * 60.0f / f;
                     lastX = x;
                     lastY = y;
-                    lastZ = z;
+                    lastZ = zr;
                     activeExtruder.lastE = activeExtruder.e;
                     break;
                 case 2:
@@ -898,7 +809,7 @@ namespace RepetierHost.model
                             }
                             if (code.hasZ)
                             {
-                                z += code.z;
+                                zr += code.z;
                                 //if (z < 0) { z = 0; hasZHome = NO; }
                                 //if (z > printerHeight) { hasZHome = NO; }
                             }
@@ -917,9 +828,9 @@ namespace RepetierHost.model
                                     if (activeExtruder.e > activeExtruder.emax)
                                     {
                                         activeExtruder.emax = activeExtruder.e;
-                                        if (z > lastZPrint)
+                                        if (zr > lastZPrint)
                                         {
-                                            lastZPrint = z;
+                                            lastZPrint = zr;
                                             layer++;
                                         }
                                     }
@@ -942,7 +853,7 @@ namespace RepetierHost.model
                             }
                             if (code.z != -99999)
                             {
-                                z = zOffset + code.z;
+                                zr = zOffset + code.z;
                                 //if (z < 0) { z = 0; hasZHome = NO; }
                                 //if (z > printerHeight) { hasZHome = NO; }
                             }
@@ -1093,14 +1004,14 @@ namespace RepetierHost.model
                         arc(position, target, offset, r, isclockwise,null);
                         lastX = x;
                         lastY = y;
-                        lastZ = z;
+                        lastZ = zr;
                         activeExtruder.lastE = activeExtruder.e;
                         if (activeExtruder.e > activeExtruder.emax)
                         {
                             activeExtruder.emax = activeExtruder.e;
-                            if (z > lastZPrint)
+                            if (zr > lastZPrint)
                             {
-                                lastZPrint = z;
+                                lastZPrint = zr;
                                 layer++;
                             }
                         }
@@ -1112,7 +1023,7 @@ namespace RepetierHost.model
                         bool homeAll = !(code.hasX || code.hasY || code.hasZ);
                         if (code.hasX || homeAll) { xOffset = 0; x = Main.printerSettings.XHomePos; hasXHome = true; }
                         if (code.hasY || homeAll) { yOffset = 0; y = Main.printerSettings.YHomePos; hasYHome = true; }
-                        if (code.hasZ || homeAll) { zOffset = 0; z = Main.printerSettings.ZHomePos; hasZHome = true; }
+                        if (code.hasZ || homeAll) { zOffset = 0; zr = Main.printerSettings.ZHomePos; hasZHome = true; }
                         if (code.hasE) { activeExtruder.eOffset = 0; activeExtruder.e = 0; activeExtruder.emax = 0; }
                         // [delegate positionChangedFastX:x y:y z:z e:e];
                     }
@@ -1122,7 +1033,7 @@ namespace RepetierHost.model
                         bool homeAll = !(code.hasX || code.hasY || code.hasZ);
                         if (code.hasX || homeAll) { xOffset = 0; x = Main.printerSettings.XMax; hasXHome = true; }
                         if (code.hasY || homeAll) { yOffset = 0; y = Main.printerSettings.YMax; hasYHome = true; }
-                        if (code.hasZ || homeAll) { zOffset = 0; z = Main.printerSettings.PrintAreaHeight; hasZHome = true; }
+                        if (code.hasZ || homeAll) { zOffset = 0; zr = Main.printerSettings.PrintAreaHeight; hasZHome = true; }
                         //[delegate positionChangedFastX:x y:y z:z e:e];
                     }
                     break;
@@ -1135,7 +1046,7 @@ namespace RepetierHost.model
                 case 8:
                     if (code.hasX) { xOffset = x - code.x; x = xOffset; }
                     if (code.hasY) { yOffset = y - code.y; y = yOffset; }
-                    if (code.hasZ) { zOffset = z - code.z; z = zOffset; }
+                    if (code.hasZ) { zOffset = zr - code.z; zr = zOffset; }
                     if (code.hasE) { activeExtruder.eOffset = activeExtruder.e - code.e; activeExtruder.lastE = activeExtruder.e = activeExtruder.eOffset; }
                     break;
                 case 12: // Host command
@@ -1150,7 +1061,7 @@ namespace RepetierHost.model
                             hasXHome = hasYHome = hasZHome = true;
                             x = xOffset = Main.printerSettings.XHomePos;
                             y = yOffset = Main.printerSettings.YHomePos;
-                            z = zOffset = Main.printerSettings.ZHomePos;
+                            zr = zOffset = Main.printerSettings.ZHomePos;
                         }
                     }
                     break;
@@ -1174,10 +1085,10 @@ namespace RepetierHost.model
                     c.layer = layer;
                 }
                 unchangedLayer.Clear();
-                layerZ = z;
+                layerZ = zr;
                 lastlayer = layer;
             }
-            else if (z != layerZ)
+            else if (zr != layerZ)
                 unchangedLayer.AddLast(code);
             code.layer = layer;
             code.tool = activeExtruderId;

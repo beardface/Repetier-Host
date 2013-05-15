@@ -364,12 +364,7 @@ namespace RepetierHost.view
             con.numberExtruder = con.numExtruder = (int)numericNumExtruder.Value;
             float.TryParse(textAddPrintingTime.Text, out con.addPrintingTime);
             int.TryParse(textReceiveCacheSize.Text, out con.receiveCacheSize);
-            if (Main.main.printPanel != null)
-            {
-                Main.main.printPanel.numericUpDownExtruder.Value = int.Parse(textDefaultExtruderTemp.Text);
-                Main.main.printPanel.numericPrintBed.Value = int.Parse(textDefaultHeatedBedTemp.Text);
-                Main.main.printPanel.refillExtruder();
-            }
+
             if (eventPrinterChanged != null)
                 eventPrinterChanged(currentPrinterKey,pnchanged);
         }
@@ -412,11 +407,6 @@ namespace RepetierHost.view
             logM105Checkbox.Checked = con.logM105;
             textAddPrintingTime.Text = con.addPrintingTime.ToString(GCode.format);
             numericNumExtruder.Value = con.numExtruder;
-            if (Main.main.printPanel != null)
-            {
-                textDefaultExtruderTemp.Text = Main.main.printPanel.numericUpDownExtruder.Value.ToString("0");
-                textDefaultHeatedBedTemp.Text = Main.main.printPanel.numericPrintBed.Value.ToString("0");
-            }
         }
         private void buttonOK_Click(object sender, EventArgs e)
         {
